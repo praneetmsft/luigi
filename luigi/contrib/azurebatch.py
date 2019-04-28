@@ -36,7 +36,9 @@ Requires:
 - azure blob storage: ``pip install azure-storage-blob>=1.3.1``
 - Azure Batch Account details
 
-Written and maintained by Praneet Solanki @praneetmsft
+Written and maintained by:
+    Praneet Solanki @praneetmsft
+    Emmanuel Awa @awaemmanuel
 
 """
 
