@@ -221,11 +221,11 @@ def on_failure(self, exception):
     body of the error email sent out if any.
     Default behavior is to return a string representation of the stack trace.
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def get_tasks_status(self):
     """Get the status of all the tasks under one Job"""
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def print_task_output(self):
     """Prints the stdout.txt file for each task in the job.
@@ -234,7 +234,7 @@ def print_task_output(self):
     :type batch_client: `batchserviceclient.BatchServiceClient`
     :param str job_id: The id of the job with task output files to print.
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def wait_for_tasks_to_complete(self):
     """
@@ -246,7 +246,7 @@ def wait_for_tasks_to_complete(self):
     tasks in the specified job do not reach Completed state within this time
     period, an exception will be raised.
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def print_batch_exception(self):
     """
@@ -254,7 +254,7 @@ def print_batch_exception(self):
 
     :param batch_exception:
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def add_tasks(batch_service_client, job_id, input_files): 
     raise NotImplementedError('Yet to be implemented.')
