@@ -135,6 +135,7 @@ def get_container_sas_token(block_blob_client, container_name, blob_permissions)
 
     return container_sas_token
 
+
 def create_pool(batch_service_client, pool_id):
     """
     Creates a pool of compute nodes with the specified OS settings.
@@ -145,7 +146,7 @@ def create_pool(batch_service_client, pool_id):
     :param str offer: Marketplace image offer
     :param str sku: Marketplace image sku
     """
-    print('Creating pool [{}]...'.format(pool_id))
+    print("Creating pool [{}]...".format(pool_id))
 
     # Create a new pool of Linux compute nodes using an Azure Virtual Machines
     # Marketplace image. For more information about creating pools of Linux
@@ -155,16 +156,34 @@ def create_pool(batch_service_client, pool_id):
         id=pool_id,
         virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
             image_reference=batchmodels.ImageReference(
-        	        publisher="Canonical",
-        	        offer="UbuntuServer",
-        	        sku="18.04-LTS",
-        	        version="latest"
-                ),
-        node_agent_sku_id="batch.node.ubuntu 18.04"),
+                publisher="Canonical",
+                offer="UbuntuServer",
+                sku="18.04-LTS",
+                version="latest",
+            ),
+            node_agent_sku_id="batch.node.ubuntu 18.04",
+        ),
         vm_size=config._POOL_VM_SIZE,
-        target_dedicated_nodes=config._POOL_NODE_COUNT
+        target_dedicated_nodes=config._POOL_NODE_COUNT,
     )
     batch_service_client.pool.add(new_pool)
+
+
+def create_job(batch_service_client, job_id, pool_id):
+    """
+    Creates a job with the specified ID, associated with the specified pool.
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The ID for the job.
+    :param str pool_id: The ID for the pool.
+    """
+    print("Creating job [{}]...".format(job_id))
+
+    job = batch.models.JobAddParameter(
+        id=job_id, pool_info=batch.models.PoolInformation(pool_id=pool_id)
+    )
+
+    batch_service_client.job.add(job)
 
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
