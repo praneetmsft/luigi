@@ -131,9 +131,6 @@ Session.vim
 
 ## Plugin-specific files:
 
-# VSCode
-*.vscode
-
 # IntelliJ
 out/
 
