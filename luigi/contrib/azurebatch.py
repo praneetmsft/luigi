@@ -185,6 +185,31 @@ def create_job(batch_service_client, job_id, pool_id):
 
     batch_service_client.job.add(job)
 
+
+def add_tasks(batch_service_client, job_id, input_files): 
+    """
+    Adds a task for each input file in the collection to the specified job.
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The ID of the job to which to add the tasks.
+    :param list input_files: A collection of input files. One task will be
+     created for each input file.
+    :param output_container_sas_token: A SAS token granting write access to
+    the specified Azure Blob storage container.
+    """
+    print('Adding {} tasks to job [{}]...'.format(len(input_files), job_id))
+    task = list()
+    for idx, input_file in enumerate(input_files):
+        command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
+        tasks.append(batch.models.TaskAddParameter(
+                id='Task-{}'.format(idx),
+                command_line=command,
+                resource_files=[input_file]
+                )
+        )
+    batch_service_client.task.add_collection(job_id, tasks)
+
+
 def submit_job_and_add_task(self):
     """Submits a job to the Azure Batch service and adds a simple task.
 
@@ -192,7 +217,7 @@ def submit_job_and_add_task(self):
     :type batch_client: `batchserviceclient.BatchServiceClient`
     :param str job_id: The id of the job to create.
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def execute_sample(global_config, sample_config):
     """Executes the sample with the specified configurations.
@@ -202,7 +227,7 @@ def execute_sample(global_config, sample_config):
     :param sample_config: The sample specific configuration to use.
     :type sample_config: `configparser.ConfigParser`
     """
-    ...
+    raise NotImplementedError('Yet to be implemented.')
 
 def on_success(self):
     """
@@ -254,7 +279,4 @@ def print_batch_exception(self):
 
     :param batch_exception:
     """
-    raise NotImplementedError('Yet to be implemented.')
-
-def add_tasks(batch_service_client, job_id, input_files): 
     raise NotImplementedError('Yet to be implemented.')
