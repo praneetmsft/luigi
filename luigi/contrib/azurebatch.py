@@ -46,23 +46,25 @@ import luigi
 import azure.batch.batch_auth as batch_auth
 import azure.batch.batch_service_client as batch
 
-class AzureBatchClient(luigi.Task):
 
+class AzureBatchClient(luigi.Task):
     def __init__(self):
-        self._BATCH_ACCOUNT_NAME ='' # Your batch account name 
-        self._BATCH_ACCOUNT_KEY = '' # Your batch account key
-        self._BATCH_ACCOUNT_URL = '' # Your batch account URL
-        self._STORAGE_ACCOUNT_NAME = '' # Your storage account name
-        self._STORAGE_ACCOUNT_KEY = '' # Your storage account key
-        self._POOL_ID = '' # Your Pool ID
-        self._POOL_NODE_COUNT = 2 # Pool node count
-        self._POOL_VM_SIZE = '' # VM Type/Size
-        self._JOB_ID = '' # Job ID
-        self._STANDARD_OUT_FILE_NAME = 'stdout.txt' # Standard Output file
-        self._credentials = batch_auth.SharedKeyCredentials(self._BATCH_ACCOUNT_NAME,
-                                                 self._BATCH_ACCOUNT_KEY)
-        self.batch_client = batch.BatchServiceClient(self._credentials,
-        batch_url=self._BATCH_ACCOUNT_URL)
+        self._BATCH_ACCOUNT_NAME = ""  # Your batch account name
+        self._BATCH_ACCOUNT_KEY = ""  # Your batch account key
+        self._BATCH_ACCOUNT_URL = ""  # Your batch account URL
+        self._STORAGE_ACCOUNT_NAME = ""  # Your storage account name
+        self._STORAGE_ACCOUNT_KEY = ""  # Your storage account key
+        self._POOL_ID = ""  # Your Pool ID
+        self._POOL_NODE_COUNT = 2  # Pool node count
+        self._POOL_VM_SIZE = ""  # VM Type/Size
+        self._JOB_ID = ""  # Job ID
+        self._STANDARD_OUT_FILE_NAME = "stdout.txt"  # Standard Output file
+        self._credentials = batch_auth.SharedKeyCredentials(
+            self._BATCH_ACCOUNT_NAME, self._BATCH_ACCOUNT_KEY
+        )
+        self.batch_client = batch.BatchServiceClient(
+            self._credentials, batch_url=self._BATCH_ACCOUNT_URL
+        )
 
     @property
     def auth_method(self):
@@ -77,6 +79,38 @@ class AzureBatchClient(luigi.Task):
         Maximum number of retrials in case of failure.
         """
         ...
+
+
+def upload_file_to_container(block_blob_client, container_name, file_path):
+    """
+    Uploads a local file to an Azure Blob storage container.
+
+    :param block_blob_client: A blob service client.
+    :type block_blob_client: `azure.storage.blob.BlockBlobService`
+    :param str container_name: The name of the Azure Blob storage container.
+    :param str file_path: The local path to the file.
+    :rtype: `azure.batch.models.ResourceFile`
+    :return: A ResourceFile initialized with a SAS URL appropriate for Batch
+    tasks.
+    """
+    blob_name = os.path.basename(file_path)
+
+    print("Uploading file {} to container [{}]...".format(file_path, container_name))
+
+    block_blob_client.create_blob_from_path(container_name, blob_name, file_path)
+
+    sas_token = block_blob_client.generate_blob_shared_access_signature(
+        container_name,
+        blob_name,
+        permission=azureblob.BlobPermissions.READ,
+        expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2),
+    )
+
+    sas_url = block_blob_client.make_blob_url(
+        container_name, blob_name, sas_token=sas_token
+    )
+
+    return batchmodels.ResourceFile(http_url=sas_url, file_path=blob_name)
 
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
@@ -148,4 +182,3 @@ class AzureBatchClient(luigi.Task):
         :param batch_exception:
         """
         ...
-    
