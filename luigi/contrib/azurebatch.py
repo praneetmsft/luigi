@@ -185,73 +185,76 @@ def create_job(batch_service_client, job_id, pool_id):
 
     batch_service_client.job.add(job)
 
-    def submit_job_and_add_task(self):
-        """Submits a job to the Azure Batch service and adds a simple task.
+def submit_job_and_add_task(self):
+    """Submits a job to the Azure Batch service and adds a simple task.
 
-        :param batch_client: The batch client to use.
-        :type batch_client: `batchserviceclient.BatchServiceClient`
-        :param str job_id: The id of the job to create.
-        """
-        ...
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job to create.
+    """
+    ...
 
-    def execute_sample(global_config, sample_config):
-        """Executes the sample with the specified configurations.
+def execute_sample(global_config, sample_config):
+    """Executes the sample with the specified configurations.
 
-        :param global_config: The global configuration to use.
-        :type global_config: `configparser.ConfigParser`
-        :param sample_config: The sample specific configuration to use.
-        :type sample_config: `configparser.ConfigParser`
-        """
-        ...
+    :param global_config: The global configuration to use.
+    :type global_config: `configparser.ConfigParser`
+    :param sample_config: The sample specific configuration to use.
+    :type sample_config: `configparser.ConfigParser`
+    """
+    ...
 
-    def on_success(self):
-        """
-        Override for doing custom completion handling for a larger class of tasks
-        This method gets called when :py:meth:`run` completes without raising any exceptions.
-        The returned value is json encoded and sent to the scheduler as the `expl` argument.
-        Default behavior is to send an None value"""
-        pass
+def on_success(self):
+    """
+    Override for doing custom completion handling for a larger class of tasks
+    This method gets called when :py:meth:`run` completes without raising any exceptions.
+    The returned value is json encoded and sent to the scheduler as the `expl` argument.
+    Default behavior is to send an None value"""
+    pass
 
-    def on_failure(self, exception):
-        """
-        Override for custom error handling.
-        This method gets called if an exception is raised in :py:meth:`run`.
-        The returned value of this method is json encoded and sent to the scheduler
-        as the `expl` argument. Its string representation will be used as the
-        body of the error email sent out if any.
-        Default behavior is to return a string representation of the stack trace.
-        """
-        ...
+def on_failure(self, exception):
+    """
+    Override for custom error handling.
+    This method gets called if an exception is raised in :py:meth:`run`.
+    The returned value of this method is json encoded and sent to the scheduler
+    as the `expl` argument. Its string representation will be used as the
+    body of the error email sent out if any.
+    Default behavior is to return a string representation of the stack trace.
+    """
+    ...
 
-    def get_tasks_status(self):
-        """Get the status of all the tasks under one Job"""
-        ...
+def get_tasks_status(self):
+    """Get the status of all the tasks under one Job"""
+    ...
 
-    def print_task_output(self):
-        """Prints the stdout.txt file for each task in the job.
+def print_task_output(self):
+    """Prints the stdout.txt file for each task in the job.
 
-        :param batch_client: The batch client to use.
-        :type batch_client: `batchserviceclient.BatchServiceClient`
-        :param str job_id: The id of the job with task output files to print.
-        """
-        ...
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job with task output files to print.
+    """
+    ...
 
-    def wait_for_tasks_to_complete(self):
-        """
-        Returns when all tasks in the specified job reach the Completed state.
-        :param batch_service_client: A Batch service client.
-        :type batch_service_client: `azure.batch.BatchServiceClient`
-        :param str job_id: The id of the job whose tasks should be to monitored.
-        :param timedelta timeout: The duration to wait for task completion. If all
-        tasks in the specified job do not reach Completed state within this time
-        period, an exception will be raised.
-        """
-        ...
+def wait_for_tasks_to_complete(self):
+    """
+    Returns when all tasks in the specified job reach the Completed state.
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The id of the job whose tasks should be to monitored.
+    :param timedelta timeout: The duration to wait for task completion. If all
+    tasks in the specified job do not reach Completed state within this time
+    period, an exception will be raised.
+    """
+    ...
 
-    def print_batch_exception(self):
-        """
-        Prints the contents of the specified Batch exception.
+def print_batch_exception(self):
+    """
+    Prints the contents of the specified Batch exception.
 
-        :param batch_exception:
-        """
-        ...
+    :param batch_exception:
+    """
+    ...
+
+def add_tasks(batch_service_client, job_id, input_files): 
+    raise NotImplementedError('Yet to be implemented.')
