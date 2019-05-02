@@ -112,6 +112,29 @@ def upload_file_to_container(block_blob_client, container_name, file_path):
 
     return batchmodels.ResourceFile(http_url=sas_url, file_path=blob_name)
 
+
+def get_container_sas_token(block_blob_client, container_name, blob_permissions):
+    """
+    Obtains a shared access signature granting the specified permissions to the
+    container.
+    :param block_blob_client: A blob service client.
+    :type block_blob_client: `azure.storage.blob.BlockBlobService`
+    :param str container_name: The name of the Azure Blob storage container.
+    :param BlobPermissions blob_permissions:
+    :rtype: str
+    :return: A SAS token granting the specified permissions to the container.
+    """
+    # Obtain the SAS token for the container, setting the expiry time and
+    # permissions. In this case, no start time is specified, so the shared
+    # access signature becomes valid immediately.
+    container_sas_token = block_blob_client.generate_container_shared_access_signature(
+        container_name,
+        permission=blob_permissions,
+        expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2),
+    )
+
+    return container_sas_token
+
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
 
