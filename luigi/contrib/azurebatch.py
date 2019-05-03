@@ -269,6 +269,25 @@ def print_task_output(batch_service_client, job_id, encoding=None):
         print("Standard output:")
         print(file_text)
 
+def _read_stream_as_string(stream, encoding):
+    """Read stream as string
+
+    :param stream: input stream generator
+    :param str encoding: The encoding of the file. The default is utf-8.
+    :return: The file content.
+    :rtype: str
+    """
+    output = io.BytesIO()
+    try:
+        for data in stream:
+            output.write(data)
+        if encoding is None:
+            encoding = 'utf-8'
+        return output.getvalue().decode(encoding)
+    finally:
+        output.close()
+    raise RuntimeError('could not write data to stream or decode bytes')
+
 
 
 def submit_job_and_add_task(self):
