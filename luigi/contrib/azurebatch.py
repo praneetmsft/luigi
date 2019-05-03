@@ -47,7 +47,7 @@ import azure.batch.batch_auth as batch_auth
 import azure.batch.batch_service_client as batch
 
 
-class AzureBatchClient(luigi.Task):
+class AzureBatchClient(object):
     def __init__(self):
         self._BATCH_ACCOUNT_NAME = ""  # Your batch account name
         self._BATCH_ACCOUNT_KEY = ""  # Your batch account key
@@ -59,19 +59,26 @@ class AzureBatchClient(luigi.Task):
         self._POOL_VM_SIZE = ""  # VM Type/Size
         self._JOB_ID = ""  # Job ID
         self._STANDARD_OUT_FILE_NAME = "stdout.txt"  # Standard Output file
-        self._credentials = batch_auth.SharedKeyCredentials(
-            self._BATCH_ACCOUNT_NAME, self._BATCH_ACCOUNT_KEY
-        )
+        self._credentials
+
         self.batch_client = batch.BatchServiceClient(
             self._credentials, batch_url=self._BATCH_ACCOUNT_URL
         )
 
     @property
-    def auth_method(self):
+    def credentials(self):
         """
         This returns the authentication for the Azure batch account
         """
-        ...
+        return batch_auth.SharedKeyCredentials(
+            self._BATCH_ACCOUNT_NAME, self._BATCH_ACCOUNT_KEY
+        )
+
+    @property
+    def client(self):
+        return batch.BatchServiceClient(
+            self.credentials,
+            batch_url=config._BATCH_ACCOUNT_URL)
 
     @property
     def max_retrials(self):
@@ -186,7 +193,7 @@ def create_job(batch_service_client, job_id, pool_id):
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, job_id, input_files): 
+def add_tasks(batch_service_client, job_id, input_files):
     """
     Adds a task for each input file in the collection to the specified job.
     :param batch_service_client: A Batch service client.
@@ -202,12 +209,13 @@ def add_tasks(batch_service_client, job_id, input_files):
     for idx, input_file in enumerate(input_files):
         command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
         tasks.append(batch.models.TaskAddParameter(
-                id='Task-{}'.format(idx),
-                command_line=command,
-                resource_files=[input_file]
-                )
+            id='Task-{}'.format(idx),
+            command_line=command,
+            resource_files=[input_file]
+        )
         )
     batch_service_client.task.add_collection(job_id, tasks)
+
 
 def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
     """
@@ -250,7 +258,7 @@ def print_task_output(batch_service_client, job_id, encoding=None):
     :type batch_client: `batchserviceclient.BatchServiceClient`
     :param str job_id: The id of the job with task output files to print.
     """
-    
+
     print('Printing task output...')
 
     tasks = batch_service_client.task.list(job_id)
@@ -268,6 +276,7 @@ def print_task_output(batch_service_client, job_id, encoding=None):
             encoding)
         print("Standard output:")
         print(file_text)
+
 
 def _read_stream_as_string(stream, encoding):
     """Read stream as string
@@ -289,7 +298,6 @@ def _read_stream_as_string(stream, encoding):
     raise RuntimeError('could not write data to stream or decode bytes')
 
 
-
 def submit_job_and_add_task(self):
     """Submits a job to the Azure Batch service and adds a simple task.
 
@@ -298,6 +306,7 @@ def submit_job_and_add_task(self):
     :param str job_id: The id of the job to create.
     """
     raise NotImplementedError('Yet to be implemented.')
+
 
 def execute_sample(global_config, sample_config):
     """Executes the sample with the specified configurations.
@@ -309,6 +318,7 @@ def execute_sample(global_config, sample_config):
     """
     raise NotImplementedError('Yet to be implemented.')
 
+
 def on_success(self):
     """
     Override for doing custom completion handling for a larger class of tasks
@@ -316,6 +326,7 @@ def on_success(self):
     The returned value is json encoded and sent to the scheduler as the `expl` argument.
     Default behavior is to send an None value"""
     pass
+
 
 def on_failure(self, exception):
     """
@@ -328,9 +339,11 @@ def on_failure(self, exception):
     """
     raise NotImplementedError('Yet to be implemented.')
 
+
 def get_tasks_status(self):
     """Get the status of all the tasks under one Job"""
     raise NotImplementedError('Yet to be implemented.')
+
 
 def print_task_output(self):
     """Prints the stdout.txt file for each task in the job.
@@ -340,6 +353,7 @@ def print_task_output(self):
     :param str job_id: The id of the job with task output files to print.
     """
     raise NotImplementedError('Yet to be implemented.')
+
 
 def wait_for_tasks_to_complete(self):
     """
@@ -352,6 +366,7 @@ def wait_for_tasks_to_complete(self):
     period, an exception will be raised.
     """
     raise NotImplementedError('Yet to be implemented.')
+
 
 def print_batch_exception(self):
     """
