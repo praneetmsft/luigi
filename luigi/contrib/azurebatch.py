@@ -209,7 +209,40 @@ def add_tasks(batch_service_client, job_id, input_files):
         )
     batch_service_client.task.add_collection(job_id, tasks)
 
+def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
+    """
+    Returns when all tasks in the specified job reach the Completed state.
 
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The id of the job whose tasks should be to monitored.
+    :param timedelta timeout: The duration to wait for task completion. If all
+    tasks in the specified job do not reach Completed state within this time
+    period, an exception will be raised.
+    """
+    timeout_expiration = datetime.datetime.now() + timeout
+
+    print("Monitoring all tasks for 'Completed' state, timeout in {}..."
+          .format(timeout), end='')
+
+    while datetime.datetime.now() < timeout_expiration:
+        print('.', end='')
+        sys.stdout.flush()
+        tasks = batch_service_client.task.list(job_id)
+
+        incomplete_tasks = [task for task in tasks if
+                            task.state != batchmodels.TaskState.completed]
+        if not incomplete_tasks:
+            print()
+            return True
+        else:
+            time.sleep(1)
+
+    print()
+    raise RuntimeError("ERROR: Tasks did not reach 'Completed' state within "
+                       "timeout period of " + str(timeout))
+
+                       
 def submit_job_and_add_task(self):
     """Submits a job to the Azure Batch service and adds a simple task.
 
