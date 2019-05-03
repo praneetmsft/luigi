@@ -59,26 +59,20 @@ class AzureBatchClient(object):
         self._POOL_VM_SIZE = ""  # VM Type/Size
         self._JOB_ID = ""  # Job ID
         self._STANDARD_OUT_FILE_NAME = "stdout.txt"  # Standard Output file
-        self._credentials
-
-        self.batch_client = batch.BatchServiceClient(
-            self._credentials, batch_url=self._BATCH_ACCOUNT_URL
-        )
 
     @property
-    def credentials(self):
+    def _credentials(self):
         """
         This returns the authentication for the Azure batch account
         """
-        return batch_auth.SharedKeyCredentials(
-            self._BATCH_ACCOUNT_NAME, self._BATCH_ACCOUNT_KEY
-        )
+        return batch_auth.SharedKeyCredentials(self._BATCH_ACCOUNT_NAME, self._BATCH_ACCOUNT_KEY)
 
     @property
     def client(self):
-        return batch.BatchServiceClient(
-            self.credentials,
-            batch_url=config._BATCH_ACCOUNT_URL)
+        """
+        This returns a property of an Azure Batch Service Client
+        """
+        return batch.BatchServiceClient(self._credentials, batch_url=self._BATCH_ACCOUNT_URL)
 
     @property
     def max_retrials(self):
