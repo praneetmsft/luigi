@@ -242,7 +242,35 @@ def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
     raise RuntimeError("ERROR: Tasks did not reach 'Completed' state within "
                        "timeout period of " + str(timeout))
 
-                       
+
+def print_task_output(batch_service_client, job_id, encoding=None):
+    """Prints the stdout.txt file for each task in the job.
+
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job with task output files to print.
+    """
+    
+    print('Printing task output...')
+
+    tasks = batch_service_client.task.list(job_id)
+
+    for task in tasks:
+
+        node_id = batch_service_client.task.get(job_id, task.id).node_info.node_id
+        print("Task: {}".format(task.id))
+        print("Node: {}".format(node_id))
+
+        stream = batch_service_client.file.get_from_task(job_id, task.id, config._STANDARD_OUT_FILE_NAME)
+
+        file_text = _read_stream_as_string(
+            stream,
+            encoding)
+        print("Standard output:")
+        print(file_text)
+
+
+
 def submit_job_and_add_task(self):
     """Submits a job to the Azure Batch service and adds a simple task.
 
