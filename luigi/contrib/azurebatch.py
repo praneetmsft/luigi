@@ -185,73 +185,178 @@ def create_job(batch_service_client, job_id, pool_id):
 
     batch_service_client.job.add(job)
 
-    def submit_job_and_add_task(self):
-        """Submits a job to the Azure Batch service and adds a simple task.
 
-        :param batch_client: The batch client to use.
-        :type batch_client: `batchserviceclient.BatchServiceClient`
-        :param str job_id: The id of the job to create.
-        """
-        ...
+def add_tasks(batch_service_client, job_id, input_files): 
+    """
+    Adds a task for each input file in the collection to the specified job.
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The ID of the job to which to add the tasks.
+    :param list input_files: A collection of input files. One task will be
+     created for each input file.
+    :param output_container_sas_token: A SAS token granting write access to
+    the specified Azure Blob storage container.
+    """
+    print('Adding {} tasks to job [{}]...'.format(len(input_files), job_id))
+    task = list()
+    for idx, input_file in enumerate(input_files):
+        command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
+        tasks.append(batch.models.TaskAddParameter(
+                id='Task-{}'.format(idx),
+                command_line=command,
+                resource_files=[input_file]
+                )
+        )
+    batch_service_client.task.add_collection(job_id, tasks)
 
-    def execute_sample(global_config, sample_config):
-        """Executes the sample with the specified configurations.
+def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
+    """
+    Returns when all tasks in the specified job reach the Completed state.
 
-        :param global_config: The global configuration to use.
-        :type global_config: `configparser.ConfigParser`
-        :param sample_config: The sample specific configuration to use.
-        :type sample_config: `configparser.ConfigParser`
-        """
-        ...
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The id of the job whose tasks should be to monitored.
+    :param timedelta timeout: The duration to wait for task completion. If all
+    tasks in the specified job do not reach Completed state within this time
+    period, an exception will be raised.
+    """
+    timeout_expiration = datetime.datetime.now() + timeout
 
-    def on_success(self):
-        """
-        Override for doing custom completion handling for a larger class of tasks
-        This method gets called when :py:meth:`run` completes without raising any exceptions.
-        The returned value is json encoded and sent to the scheduler as the `expl` argument.
-        Default behavior is to send an None value"""
-        pass
+    print("Monitoring all tasks for 'Completed' state, timeout in {}..."
+          .format(timeout), end='')
 
-    def on_failure(self, exception):
-        """
-        Override for custom error handling.
-        This method gets called if an exception is raised in :py:meth:`run`.
-        The returned value of this method is json encoded and sent to the scheduler
-        as the `expl` argument. Its string representation will be used as the
-        body of the error email sent out if any.
-        Default behavior is to return a string representation of the stack trace.
-        """
-        ...
+    while datetime.datetime.now() < timeout_expiration:
+        print('.', end='')
+        sys.stdout.flush()
+        tasks = batch_service_client.task.list(job_id)
 
-    def get_tasks_status(self):
-        """Get the status of all the tasks under one Job"""
-        ...
+        incomplete_tasks = [task for task in tasks if
+                            task.state != batchmodels.TaskState.completed]
+        if not incomplete_tasks:
+            print()
+            return True
+        else:
+            time.sleep(1)
 
-    def print_task_output(self):
-        """Prints the stdout.txt file for each task in the job.
+    print()
+    raise RuntimeError("ERROR: Tasks did not reach 'Completed' state within "
+                       "timeout period of " + str(timeout))
 
-        :param batch_client: The batch client to use.
-        :type batch_client: `batchserviceclient.BatchServiceClient`
-        :param str job_id: The id of the job with task output files to print.
-        """
-        ...
 
-    def wait_for_tasks_to_complete(self):
-        """
-        Returns when all tasks in the specified job reach the Completed state.
-        :param batch_service_client: A Batch service client.
-        :type batch_service_client: `azure.batch.BatchServiceClient`
-        :param str job_id: The id of the job whose tasks should be to monitored.
-        :param timedelta timeout: The duration to wait for task completion. If all
-        tasks in the specified job do not reach Completed state within this time
-        period, an exception will be raised.
-        """
-        ...
+def print_task_output(batch_service_client, job_id, encoding=None):
+    """Prints the stdout.txt file for each task in the job.
 
-    def print_batch_exception(self):
-        """
-        Prints the contents of the specified Batch exception.
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job with task output files to print.
+    """
+    
+    print('Printing task output...')
 
-        :param batch_exception:
-        """
-        ...
+    tasks = batch_service_client.task.list(job_id)
+
+    for task in tasks:
+
+        node_id = batch_service_client.task.get(job_id, task.id).node_info.node_id
+        print("Task: {}".format(task.id))
+        print("Node: {}".format(node_id))
+
+        stream = batch_service_client.file.get_from_task(job_id, task.id, config._STANDARD_OUT_FILE_NAME)
+
+        file_text = _read_stream_as_string(
+            stream,
+            encoding)
+        print("Standard output:")
+        print(file_text)
+
+def _read_stream_as_string(stream, encoding):
+    """Read stream as string
+
+    :param stream: input stream generator
+    :param str encoding: The encoding of the file. The default is utf-8.
+    :return: The file content.
+    :rtype: str
+    """
+    output = io.BytesIO()
+    try:
+        for data in stream:
+            output.write(data)
+        if encoding is None:
+            encoding = 'utf-8'
+        return output.getvalue().decode(encoding)
+    finally:
+        output.close()
+    raise RuntimeError('could not write data to stream or decode bytes')
+
+
+
+def submit_job_and_add_task(self):
+    """Submits a job to the Azure Batch service and adds a simple task.
+
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job to create.
+    """
+    raise NotImplementedError('Yet to be implemented.')
+
+def execute_sample(global_config, sample_config):
+    """Executes the sample with the specified configurations.
+
+    :param global_config: The global configuration to use.
+    :type global_config: `configparser.ConfigParser`
+    :param sample_config: The sample specific configuration to use.
+    :type sample_config: `configparser.ConfigParser`
+    """
+    raise NotImplementedError('Yet to be implemented.')
+
+def on_success(self):
+    """
+    Override for doing custom completion handling for a larger class of tasks
+    This method gets called when :py:meth:`run` completes without raising any exceptions.
+    The returned value is json encoded and sent to the scheduler as the `expl` argument.
+    Default behavior is to send an None value"""
+    pass
+
+def on_failure(self, exception):
+    """
+    Override for custom error handling.
+    This method gets called if an exception is raised in :py:meth:`run`.
+    The returned value of this method is json encoded and sent to the scheduler
+    as the `expl` argument. Its string representation will be used as the
+    body of the error email sent out if any.
+    Default behavior is to return a string representation of the stack trace.
+    """
+    raise NotImplementedError('Yet to be implemented.')
+
+def get_tasks_status(self):
+    """Get the status of all the tasks under one Job"""
+    raise NotImplementedError('Yet to be implemented.')
+
+def print_task_output(self):
+    """Prints the stdout.txt file for each task in the job.
+
+    :param batch_client: The batch client to use.
+    :type batch_client: `batchserviceclient.BatchServiceClient`
+    :param str job_id: The id of the job with task output files to print.
+    """
+    raise NotImplementedError('Yet to be implemented.')
+
+def wait_for_tasks_to_complete(self):
+    """
+    Returns when all tasks in the specified job reach the Completed state.
+    :param batch_service_client: A Batch service client.
+    :type batch_service_client: `azure.batch.BatchServiceClient`
+    :param str job_id: The id of the job whose tasks should be to monitored.
+    :param timedelta timeout: The duration to wait for task completion. If all
+    tasks in the specified job do not reach Completed state within this time
+    period, an exception will be raised.
+    """
+    raise NotImplementedError('Yet to be implemented.')
+
+def print_batch_exception(self):
+    """
+    Prints the contents of the specified Batch exception.
+
+    :param batch_exception:
+    """
+    raise NotImplementedError('Yet to be implemented.')
