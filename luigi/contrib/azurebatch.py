@@ -190,106 +190,114 @@ class AzureBatchClient(object):
 
         self.client.job.add(job)
 
-    # def add_tasks(batch_service_client, job_id, input_files):
-    #     """
-    #     Adds a task for each input file in the collection to the specified job.
-    #     :param batch_service_client: A Batch service client.
-    #     :type batch_service_client: `azure.batch.BatchServiceClient`
-    #     :param str job_id: The ID of the job to which to add the tasks.
-    #     :param list input_files: A collection of input files. One task will be
-    #      created for each input file.
-    #     :param output_container_sas_token: A SAS token granting write access to
-    #     the specified Azure Blob storage container.
-    #     """
-    #     print('Adding {} tasks to job [{}]...'.format(len(input_files), job_id))
-    #     task = list()
-    #     for idx, input_file in enumerate(input_files):
-    #         command = "/bin/bash -c \"cat {}\"".format(input_file.file_path)
-    #         tasks.append(batch.models.TaskAddParameter(
-    #             id='Task-{}'.format(idx),
-    #             command_line=command,
-    #             resource_files=[input_file]
-    #         )
-    #         )
-    #     batch_service_client.task.add_collection(job_id, tasks)
+    def add_tasks(self, job_id, input_files):
+        """
+        Adds a task for each input file in the collection to the specified job.
+        :param batch_service_client: A Batch service client.
+        :type batch_service_client: `azure.batch.BatchServiceClient`
+        :param str job_id: The ID of the job to which to add the tasks.
+        :param list input_files: A collection of input files. One task will be
+         created for each input file.
+        :param output_container_sas_token: A SAS token granting write access to
+        the specified Azure Blob storage container.
+        """
+        print("Adding {} tasks to job [{}]...".format(len(input_files), job_id))
+        task = list()
+        for idx, input_file in enumerate(input_files):
+            command = '/bin/bash -c "cat {}"'.format(input_file.file_path)
+            tasks.append(
+                batch.models.TaskAddParameter(
+                    id="Task-{}".format(idx),
+                    command_line=command,
+                    resource_files=[input_file],
+                )
+            )
+        self.client.task.add_collection(job_id, tasks)
 
-    # def wait_for_tasks_to_complete(batch_service_client, job_id, timeout):
-    #     """
-    #     Returns when all tasks in the specified job reach the Completed state.
+    def wait_for_tasks_to_complete(self, job_id, timeout):
+        """
+        Returns when all tasks in the specified job reach the Completed state.
 
-    #     :param batch_service_client: A Batch service client.
-    #     :type batch_service_client: `azure.batch.BatchServiceClient`
-    #     :param str job_id: The id of the job whose tasks should be to monitored.
-    #     :param timedelta timeout: The duration to wait for task completion. If all
-    #     tasks in the specified job do not reach Completed state within this time
-    #     period, an exception will be raised.
-    #     """
-    #     timeout_expiration = datetime.datetime.now() + timeout
+        :param batch_service_client: A Batch service client.
+        :type batch_service_client: `azure.batch.BatchServiceClient`
+        :param str job_id: The id of the job whose tasks should be to monitored.
+        :param timedelta timeout: The duration to wait for task completion. If all
+        tasks in the specified job do not reach Completed state within this time
+        period, an exception will be raised.
+        """
+        timeout_expiration = datetime.datetime.now() + timeout
 
-    #     print("Monitoring all tasks for 'Completed' state, timeout in {}..."
-    #           .format(timeout), end='')
+        print(
+            "Monitoring all tasks for 'Completed' state, timeout in {}...".format(
+                timeout
+            ),
+            end="",
+        )
 
-    #     while datetime.datetime.now() < timeout_expiration:
-    #         print('.', end='')
-    #         sys.stdout.flush()
-    #         tasks = batch_service_client.task.list(job_id)
+        while datetime.datetime.now() < timeout_expiration:
+            print(".", end="")
+            sys.stdout.flush()
+            tasks = self.client.task.list(job_id)
 
-    #         incomplete_tasks = [task for task in tasks if
-    #                             task.state != batchmodels.TaskState.completed]
-    #         if not incomplete_tasks:
-    #             print()
-    #             return True
-    #         else:
-    #             time.sleep(1)
+            incomplete_tasks = [
+                task for task in tasks if task.state != batchmodels.TaskState.completed
+            ]
+            if not incomplete_tasks:
+                print()
+                return True
+            else:
+                time.sleep(1)
 
-    #     print()
-    #     raise RuntimeError("ERROR: Tasks did not reach 'Completed' state within "
-    #                        "timeout period of " + str(timeout))
+        print()
+        raise RuntimeError(
+            "ERROR: Tasks did not reach 'Completed' state within "
+            "timeout period of " + str(timeout)
+        )
 
-    # def print_task_output(batch_service_client, job_id, encoding=None):
-    #     """Prints the stdout.txt file for each task in the job.
+    def print_task_output(self, job_id, encoding=None):
+        """Prints the stdout.txt file for each task in the job.
 
-    #     :param batch_client: The batch client to use.
-    #     :type batch_client: `batchserviceclient.BatchServiceClient`
-    #     :param str job_id: The id of the job with task output files to print.
-    #     """
+        :param batch_client: The batch client to use.
+        :type batch_client: `batchserviceclient.BatchServiceClient`
+        :param str job_id: The id of the job with task output files to print.
+        """
 
-    #     print('Printing task output...')
+        print("Printing task output...")
 
-    #     tasks = batch_service_client.task.list(job_id)
+        tasks = self.client.task.list(job_id)
 
-    #     for task in tasks:
+        for task in tasks:
 
-    #         node_id = batch_service_client.task.get(job_id, task.id).node_info.node_id
-    #         print("Task: {}".format(task.id))
-    #         print("Node: {}".format(node_id))
+            node_id = self.client.task.get(job_id, task.id).node_info.node_id
+            print("Task: {}".format(task.id))
+            print("Node: {}".format(node_id))
 
-    #         stream = batch_service_client.file.get_from_task(job_id, task.id, config._STANDARD_OUT_FILE_NAME)
+            stream = self.client.file.get_from_task(
+                job_id, task.id, self._STANDARD_OUT_FILE_NAME
+            )
 
-    #         file_text = _read_stream_as_string(
-    #             stream,
-    #             encoding)
-    #         print("Standard output:")
-    #         print(file_text)
+            file_text = self._read_stream_as_string(stream, encoding)
+            print("Standard output:")
+            print(file_text)
 
-    # def _read_stream_as_string(stream, encoding):
-    #     """Read stream as string
+    def _read_stream_as_string(self, stream, encoding):
+        """Read stream as string
 
-    #     :param stream: input stream generator
-    #     :param str encoding: The encoding of the file. The default is utf-8.
-    #     :return: The file content.
-    #     :rtype: str
-    #     """
-    #     output = io.BytesIO()
-    #     try:
-    #         for data in stream:
-    #             output.write(data)
-    #         if encoding is None:
-    #             encoding = 'utf-8'
-    #         return output.getvalue().decode(encoding)
-    #     finally:
-    #         output.close()
-    #     raise RuntimeError('could not write data to stream or decode bytes')
+        :param stream: input stream generator
+        :param str encoding: The encoding of the file. The default is utf-8.
+        :return: The file content.
+        :rtype: str
+        """
+        output = io.BytesIO()
+        try:
+            for data in stream:
+                output.write(data)
+            if encoding is None:
+                encoding = "utf-8"
+            return output.getvalue().decode(encoding)
+        finally:
+            output.close()
+        raise RuntimeError("could not write data to stream or decode bytes")
 
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
