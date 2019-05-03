@@ -48,17 +48,33 @@ import azure.batch.batch_service_client as batch
 
 
 class AzureBatchClient(object):
-    def __init__(self):
-        self._BATCH_ACCOUNT_NAME = ""  # Your batch account name
-        self._BATCH_ACCOUNT_KEY = ""  # Your batch account key
+    def __init__(
+        self,
+        batch_account_name,
+        batch_account_key,
+        batch_account_url,
+        storage_account_name=None,
+        storage_account_key=None,
+        storage_sas_token=None,
+        input_path,
+        output_path,
+        pool_node_count=2,
+        pool_vm_size="STANDARD_D2_V2",
+        **kwargs
+    ):
+        self._BATCH_ACCOUNT_NAME = batch_account_name  # Your batch account name
+        self._BATCH_ACCOUNT_KEY = batch_account_key  # Your batch account key
         self._BATCH_ACCOUNT_URL = ""  # Your batch account URL
         self._STORAGE_ACCOUNT_NAME = ""  # Your storage account name
         self._STORAGE_ACCOUNT_KEY = ""  # Your storage account key
+        self._INPUT_PATH = ""  # Input files path on your storage account
+        self._OUTPUT_PATH = ""  # Output files path on your storage account
         self._POOL_ID = ""  # Your Pool ID
-        self._POOL_NODE_COUNT = 2  # Pool node count
-        self._POOL_VM_SIZE = ""  # VM Type/Size
+        self._POOL_NODE_COUNT = pool_node_count  # Pool node count
+        self._POOL_VM_SIZE = pool_vm_size  # VM Type/Size
         self._JOB_ID = ""  # Job ID
         self._STANDARD_OUT_FILE_NAME = "stdout.txt"  # Standard Output file
+        self.kwargs = kwargs
 
     @property
     def _credentials(self):
@@ -169,8 +185,8 @@ class AzureBatchClient(object):
                 ),
                 node_agent_sku_id="batch.node.ubuntu 18.04",
             ),
-            vm_size=config._POOL_VM_SIZE,
-            target_dedicated_nodes=config._POOL_NODE_COUNT,
+            vm_size=self._POOL_VM_SIZE,
+            target_dedicated_nodes=self._POOL_NODE_COUNT,
         )
         self.client.pool.add(new_pool)
 
