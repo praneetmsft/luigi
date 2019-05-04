@@ -43,22 +43,41 @@ Written and maintained by:
 """
 
 import luigi
+import azure.storage.blob as azureblob
 import azure.batch.batch_auth as batch_auth
 import azure.batch.batch_service_client as batch
 
 
 class AzureBatchClient(object):
-    def __init__(self):
-        self._BATCH_ACCOUNT_NAME = ""  # Your batch account name
-        self._BATCH_ACCOUNT_KEY = ""  # Your batch account key
-        self._BATCH_ACCOUNT_URL = ""  # Your batch account URL
-        self._STORAGE_ACCOUNT_NAME = ""  # Your storage account name
-        self._STORAGE_ACCOUNT_KEY = ""  # Your storage account key
-        self._POOL_ID = ""  # Your Pool ID
-        self._POOL_NODE_COUNT = 2  # Pool node count
-        self._POOL_VM_SIZE = ""  # VM Type/Size
-        self._JOB_ID = ""  # Job ID
+    def __init__(
+        self,
+        batch_account_name,
+        batch_account_key,
+        batch_account_url,
+        storage_account_name=None,
+        storage_account_key=None,
+        storage_sas_token=None,
+        input_path,
+        output_path,
+        pool_id,
+        job_id,
+        pool_node_count=2,
+        pool_vm_size="STANDARD_D2_V2",
+        **kwargs
+    ):
+        self._BATCH_ACCOUNT_NAME = batch_account_name  # Your batch account name
+        self._BATCH_ACCOUNT_KEY = batch_account_key  # Your batch account key
+        self._BATCH_ACCOUNT_URL = batch_account_url  # Your batch account URL
+        self._STORAGE_ACCOUNT_NAME = storage_account_name  # Your storage account name
+        self._STORAGE_ACCOUNT_KEY = storage_account_key  # Your storage account key
+        self._INPUT_PATH = input_path  # Input files path on your storage account
+        self._OUTPUT_PATH = output_path  # Output files path on your storage account
+        self._POOL_ID = pool_id  # Your Pool ID
+        self._POOL_NODE_COUNT = pool_node_count  # Pool node count
+        self._POOL_VM_SIZE = pool_vm_size  # VM Type/Size
+        self._JOB_ID = job_id  # Job ID
         self._STANDARD_OUT_FILE_NAME = "stdout.txt"  # Standard Output file
+        self.kwargs = kwargs
 
     @property
     def _credentials(self):
@@ -79,18 +98,26 @@ class AzureBatchClient(object):
         )
 
     @property
+    def blob_client(self):
+        """
+        This returns the authentication for the Azure batch account
+        """
+        return azureblob.BlockBlobService(
+            account_name=self._STORAGE_ACCOUNT_NAME,
+            account_key=self._STORAGE_ACCOUNT_KEY,
+        )
+
+    @property
     def max_retrials(self):
         """
         Maximum number of retrials in case of failure.
         """
         ...
 
-    def upload_file_to_container(self, block_blob_client, container_name, file_path):
+    def upload_file_to_container(self, container_name, file_path):
         """
         Uploads a local file to an Azure Blob storage container.
 
-        :param block_blob_client: A blob service client.
-        :type block_blob_client: `azure.storage.blob.BlockBlobService`
         :param str container_name: The name of the Azure Blob storage container.
         :param str file_path: The local path to the file.
         :rtype: `azure.batch.models.ResourceFile`
@@ -103,29 +130,27 @@ class AzureBatchClient(object):
             "Uploading file {} to container [{}]...".format(file_path, container_name)
         )
 
-        block_blob_client.create_blob_from_path(container_name, blob_name, file_path)
+        self.blob_client.create_blob_from_path(container_name, blob_name, file_path)
 
-        sas_token = block_blob_client.generate_blob_shared_access_signature(
+        sas_token = self.blob_client.generate_blob_shared_access_signature(
             container_name,
             blob_name,
             permission=azureblob.BlobPermissions.READ,
             expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2),
         )
 
-        sas_url = block_blob_client.make_blob_url(
+        sas_url = self.blob_client.make_blob_url(
             container_name, blob_name, sas_token=sas_token
         )
 
         return batchmodels.ResourceFile(http_url=sas_url, file_path=blob_name)
 
     def get_container_sas_token(
-        self, block_blob_client, container_name, blob_permissions
+        self, container_name, blob_permissions
     ):
         """
         Obtains a shared access signature granting the specified permissions to the
         container.
-        :param block_blob_client: A blob service client.
-        :type block_blob_client: `azure.storage.blob.BlockBlobService`
         :param str container_name: The name of the Azure Blob storage container.
         :param BlobPermissions blob_permissions:
         :rtype: str
@@ -134,7 +159,7 @@ class AzureBatchClient(object):
         # Obtain the SAS token for the container, setting the expiry time and
         # permissions. In this case, no start time is specified, so the shared
         # access signature becomes valid immediately.
-        container_sas_token = block_blob_client.generate_container_shared_access_signature(
+        container_sas_token = self.blob_client.generate_container_shared_access_signature(
             container_name,
             permission=blob_permissions,
             expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2),
@@ -169,8 +194,8 @@ class AzureBatchClient(object):
                 ),
                 node_agent_sku_id="batch.node.ubuntu 18.04",
             ),
-            vm_size=config._POOL_VM_SIZE,
-            target_dedicated_nodes=config._POOL_NODE_COUNT,
+            vm_size=self._POOL_VM_SIZE,
+            target_dedicated_nodes=self._POOL_NODE_COUNT,
         )
         self.client.pool.add(new_pool)
 
@@ -369,4 +394,3 @@ class AzureBatchClient(object):
         :param batch_exception:
         """
         raise NotImplementedError("Yet to be implemented.")
-
