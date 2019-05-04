@@ -42,6 +42,9 @@ Written and maintained by:
 
 """
 import os
+import io
+import sys
+import time
 import datetime
 import luigi
 import azure.storage.blob as azureblob
@@ -49,11 +52,14 @@ import azure.batch.batch_auth as batch_auth
 import azure.batch.batch_service_client as batch
 import azure.batch.models as batchmodels
 
+
+RESOURCE_SUFFIX = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 TASK_POOL_NODE_COUNT = 2
-TASK_POOL_VM_SIZE = 'STANDARD_D2_V2'
-TASK_POOL_ID = 'Luigi-Azure-Batch-Pool-Id-{}'.format()
-TASK_JOB_ID = 'Luigi-Azure-Batch-Job-Id-{}'.format()
+TASK_POOL_VM_SIZE = "STANDARD_D2_V2"
+TASK_POOL_ID = "AzureBatch-Pool-Id-{}".format(RESOURCE_SUFFIX)
+TASK_JOB_ID = "AzureBatch-Pool-Id-{}".format(RESOURCE_SUFFIX)
 TASK_TIME_OUT = 30
+
 
 class AzureBatchClient(object):
     def __init__(
@@ -61,8 +67,8 @@ class AzureBatchClient(object):
         batch_account_name,
         batch_account_key,
         batch_account_url,
-        storage_account_name=None,
-        storage_account_key=None,
+        storage_account_name,
+        storage_account_key,
         output_path,
         pool_id,
         job_id,
@@ -149,9 +155,7 @@ class AzureBatchClient(object):
 
         return batchmodels.ResourceFile(http_url=sas_url, file_path=blob_name)
 
-    def get_container_sas_token(
-        self, container_name, blob_permissions
-    ):
+    def get_container_sas_token(self, container_name, blob_permissions):
         """
         Obtains a shared access signature granting the specified permissions to the
         container.
@@ -171,7 +175,7 @@ class AzureBatchClient(object):
 
         return container_sas_token
 
-    def create_pool(self, pool_id):
+    def create_pool(self):
         """
         Creates a pool of compute nodes with the specified OS settings.
         :param batch_service_client: A Batch service client.
@@ -181,14 +185,14 @@ class AzureBatchClient(object):
         :param str offer: Marketplace image offer
         :param str sku: Marketplace image sku
         """
-        print("Creating pool [{}]...".format(pool_id))
+        print("Creating pool [{}]...".format(self._POOL_ID))
 
         # Create a new pool of Linux compute nodes using an Azure Virtual Machines
         # Marketplace image. For more information about creating pools of Linux
         # nodes, see:
         # https://azure.microsoft.com/documentation/articles/batch-linux-nodes/
         new_pool = batch.models.PoolAddParameter(
-            id=pool_id,
+            id=self._POOL_ID,
             virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
                 image_reference=batchmodels.ImageReference(
                     publisher="Canonical",
@@ -203,7 +207,7 @@ class AzureBatchClient(object):
         )
         self.client.pool.add(new_pool)
 
-    def create_job(self, job_id, pool_id):
+    def create_job(self):
         """
         Creates a job with the specified ID, associated with the specified pool.
         :param batch_service_client: A Batch service client.
@@ -211,10 +215,11 @@ class AzureBatchClient(object):
         :param str job_id: The ID for the job.
         :param str pool_id: The ID for the pool.
         """
-        print("Creating job [{}]...".format(job_id))
+        print("Creating job [{}]...".format(self._JOB_ID))
 
         job = batch.models.JobAddParameter(
-            id=job_id, pool_info=batch.models.PoolInformation(pool_id=pool_id)
+            id=self._JOB_ID,
+            pool_info=batch.models.PoolInformation(pool_id=self._POOL_ID),
         )
 
         self.client.job.add(job)
@@ -253,7 +258,7 @@ class AzureBatchClient(object):
 
         self.client.task.add_collection(self._JOB_ID, tasks)
 
-    def wait_for_tasks_to_complete(self, job_id, timeout):
+    def wait_for_tasks_to_complete(self, timeout):
         """
         Returns when all tasks in the specified job reach the Completed state.
 
@@ -276,7 +281,7 @@ class AzureBatchClient(object):
         while datetime.datetime.now() < timeout_expiration:
             print(".", end="")
             sys.stdout.flush()
-            tasks = self.client.task.list(job_id)
+            tasks = self.client.task.list(self._JOB_ID)
 
             incomplete_tasks = [
                 task for task in tasks if task.state != batchmodels.TaskState.completed
@@ -293,7 +298,7 @@ class AzureBatchClient(object):
             "timeout period of " + str(timeout)
         )
 
-    def print_task_output(self, job_id, encoding=None):
+    def print_task_output(self, encoding=None):
         """Prints the stdout.txt file for each task in the job.
 
         :param batch_client: The batch client to use.
@@ -303,16 +308,16 @@ class AzureBatchClient(object):
 
         print("Printing task output...")
 
-        tasks = self.client.task.list(job_id)
+        tasks = self.client.task.list(self._JOB_ID)
 
         for task in tasks:
 
-            node_id = self.client.task.get(job_id, task.id).node_info.node_id
+            node_id = self.client.task.get(self._JOB_ID, task.id).node_info.node_id
             print("Task: {}".format(task.id))
             print("Node: {}".format(node_id))
 
             stream = self.client.file.get_from_task(
-                job_id, task.id, self._STANDARD_OUT_FILE_NAME
+                self._JOB_ID, task.id, self._STANDARD_OUT_FILE_NAME
             )
 
             file_text = self._read_stream_as_string(stream, encoding)
@@ -345,7 +350,7 @@ class AzureBatchClient(object):
         try:
             self.blob_client.delete_container(container_name)
         except IOError:
-            raise IOError('Failed to delete storage container')
+            raise IOError("Failed to delete storage container")
 
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
@@ -372,7 +377,7 @@ class AzureBatchClient(object):
         This method gets called when :py:meth:`run` completes without raising any exceptions.
         The returned value is json encoded and sent to the scheduler as the `expl` argument.
         Default behavior is to send an None value"""
-        raise NotImplementedError('Yet to be implemented.')
+        raise NotImplementedError("Yet to be implemented.")
 
     def on_failure(self, exception):
         """
@@ -407,7 +412,6 @@ class AzureBatchClient(object):
                 for mesg in batch_exception.error.values:
                     print("{}:\t{}".format(mesg.key, mesg.value))
         print("-------------------------------------------")
-
 
 
 class AzureBatchTask(luigi.Task):
