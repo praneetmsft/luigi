@@ -219,7 +219,7 @@ class AzureBatchClient(object):
 
         self.client.job.add(job)
 
-    def add_tasks(self, job_id, input_files):
+    def add_tasks(self, input_files, command):
         """
         Adds a task for each input file in the collection to the specified job.
         :param batch_service_client: A Batch service client.
@@ -227,21 +227,31 @@ class AzureBatchClient(object):
         :param str job_id: The ID of the job to which to add the tasks.
         :param list input_files: A collection of input files. One task will be
          created for each input file.
+        :param str command: command to run in each task e.g. "python main.py"
         :param output_container_sas_token: A SAS token granting write access to
         the specified Azure Blob storage container.
         """
-        print("Adding {} tasks to job [{}]...".format(len(input_files), job_id))
-        task = list()
-        for idx, input_file in enumerate(input_files):
-            command = '/bin/bash -c "cat {}"'.format(input_file.file_path)
+        print("Adding {} tasks to job [{}]...".format(len(input_files), self._JOB_ID))
+        tasks = list()
+
+        if len(input_files) > 0:
+            for idx, input_file in enumerate(input_files):
+                # command = '/bin/bash -c "cat {}"'.format(input_file.file_path)
+                tasks.append(
+                    batch.models.TaskAddParameter(
+                        id="Task-{}".format(idx),
+                        command_line=command,
+                        resource_files=[input_file],
+                    )
+                )
+        else:
             tasks.append(
                 batch.models.TaskAddParameter(
-                    id="Task-{}".format(idx),
-                    command_line=command,
-                    resource_files=[input_file],
+                    id="Task-{}".format(RESOURCE_SUFFIX), command_line=command
                 )
             )
-        self.client.task.add_collection(job_id, tasks)
+
+        self.client.task.add_collection(self._JOB_ID, tasks)
 
     def wait_for_tasks_to_complete(self, job_id, timeout):
         """
@@ -427,42 +437,58 @@ class AzureBatchTask(luigi.Task):
     :param pool_vm_size (str): size of vm to use for the batch job
 
     """
+
     batch_account_name = luigi.Parameter()
     batch_account_key = luigi.Parameter()
+    batch_account_url = luigi.Parameter()
     storage_account_name = luigi.Parameter()
     storage_account_key = luigi.Parameter()
-    input_path = luigi.Parameter()
-    output_path = luigi.Parameter()
+    input_path = luigi.Parameter(default=" ")
+    command = luigi.Parameter(default="echo Hello World")
+    output_path = luigi.Parameter(default=" ")
     pool_id = luigi.Parameter(default=TASK_POOL_ID)
     job_id = luigi.Parameter(default=TASK_JOB_ID)
     pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
     pool_vm_size = luigi.Parameter(default=TASK_POOL_VM_SIZE)
     kwargs = luigi.DictParameter(default={})
+    container_name = "luigitargetdata"
 
     def run(self):
         bc = AzureBatchClient(
-                self.batch_account_name,
-                self.batch_account_key,
-                self.batch_account_url,
-                self.storage_account_name,
-                self.storage_account_key,
-                self.output_path,
-                self.pool_id,
-                self.job_id,
-                self.pool_node_count,
-                self.pool_vm_size,
-                self.kwargs)
+            self.batch_account_name,
+            self.batch_account_key,
+            self.batch_account_url,
+            self.storage_account_name,
+            self.storage_account_key,
+            self.output_path,
+            self.pool_id,
+            self.job_id,
+            self.pool_node_count,
+            self.pool_vm_size,
+            # self.kwargs,
+        )
 
-        input_files = [bc.upload_file_to_container(self.container_name, file_path) for file_path in os.listdir(self.input_path)]
+        bc.blob_client.create_container(self.container_name, fail_on_exist=False)
+
+        if os.path.exists(self.input_path):
+            input_files = [
+                bc.upload_file_to_container(
+                    self.container_name, self.input_path + file_path
+                )
+                for file_path in os.listdir(self.input_path)
+            ]
+        else:
+            input_files = []
+
         try:
-            bc.create_pool(self.pool_id)
-            bc.create_job(self.job_id, self.pool_id)
-            bc.add_tasks(self.job_id, input_files)
-            bc.wait_for_tasks_to_complete(self.job_id, datetime.timedelta(minutes=TASK_TIME_OUT))
-            bc.print_task_output(self.job_id)
+            bc.create_pool()
+            bc.create_job()
+            bc.add_tasks(input_files, self.command)
+            bc.wait_for_tasks_to_complete(datetime.timedelta(minutes=TASK_TIME_OUT))
+            bc.print_task_output()
         except batchmodels.BatchErrorException as err:
             bc.print_batch_exception(err)
         finally:
             bc.delete_blob_container(self.container_name)
-    
-        
+            bc.client.job.delete(self.job_id)
+            bc.client.pool.delete(self.pool_id)
