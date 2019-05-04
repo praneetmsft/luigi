@@ -455,7 +455,7 @@ class AzureBatchTask(luigi.Task):
     pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
     pool_vm_size = luigi.Parameter(default=TASK_POOL_VM_SIZE)
     kwargs = luigi.DictParameter(default={})
-    container_name = "luigitargetdata"
+    container_name = luigi.Parameter(default="luigiTargetData")
 
     def run(self):
         bc = AzureBatchClient(
