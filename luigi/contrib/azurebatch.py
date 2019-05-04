@@ -41,12 +41,19 @@ Written and maintained by:
     Emmanuel Awa @awaemmanuel
 
 """
-
+import os
+import datetime
 import luigi
 import azure.storage.blob as azureblob
 import azure.batch.batch_auth as batch_auth
 import azure.batch.batch_service_client as batch
+import azure.batch.models as batchmodels
 
+TASK_POOL_NODE_COUNT = 2
+TASK_POOL_VM_SIZE = 'STANDARD_D2_V2'
+TASK_POOL_ID = 'Luigi-Azure-Batch-Pool-Id-{}'.format()
+TASK_JOB_ID = 'Luigi-Azure-Batch-Job-Id-{}'.format()
+TASK_TIME_OUT = 30
 
 class AzureBatchClient(object):
     def __init__(
@@ -56,13 +63,11 @@ class AzureBatchClient(object):
         batch_account_url,
         storage_account_name=None,
         storage_account_key=None,
-        storage_sas_token=None,
-        input_path,
         output_path,
         pool_id,
         job_id,
-        pool_node_count=2,
-        pool_vm_size="STANDARD_D2_V2",
+        pool_node_count,
+        pool_vm_size,
         **kwargs
     ):
         self._BATCH_ACCOUNT_NAME = batch_account_name  # Your batch account name
@@ -70,7 +75,6 @@ class AzureBatchClient(object):
         self._BATCH_ACCOUNT_URL = batch_account_url  # Your batch account URL
         self._STORAGE_ACCOUNT_NAME = storage_account_name  # Your storage account name
         self._STORAGE_ACCOUNT_KEY = storage_account_key  # Your storage account key
-        self._INPUT_PATH = input_path  # Input files path on your storage account
         self._OUTPUT_PATH = output_path  # Output files path on your storage account
         self._POOL_ID = pool_id  # Your Pool ID
         self._POOL_NODE_COUNT = pool_node_count  # Pool node count
@@ -324,6 +328,15 @@ class AzureBatchClient(object):
             output.close()
         raise RuntimeError("could not write data to stream or decode bytes")
 
+    def delete_blob_container(self, container_name):
+        """ Clean up Azure Storage Container 
+        :param: container_name (str): Container name with data for batch processing
+        """
+        try:
+            self.blob_client.delete_container(container_name)
+        except IOError:
+            raise IOError('Failed to delete storage container')
+
     def submit_job_and_add_task(self):
         """Submits a job to the Azure Batch service and adds a simple task.
 
@@ -349,7 +362,7 @@ class AzureBatchClient(object):
         This method gets called when :py:meth:`run` completes without raising any exceptions.
         The returned value is json encoded and sent to the scheduler as the `expl` argument.
         Default behavior is to send an None value"""
-        pass
+        raise NotImplementedError('Yet to be implemented.')
 
     def on_failure(self, exception):
         """
@@ -366,27 +379,6 @@ class AzureBatchClient(object):
         """Get the status of all the tasks under one Job"""
         raise NotImplementedError("Yet to be implemented.")
 
-    def print_task_output(self):
-        """Prints the stdout.txt file for each task in the job.
-
-        :param batch_client: The batch client to use.
-        :type batch_client: `batchserviceclient.BatchServiceClient`
-        :param str job_id: The id of the job with task output files to print.
-        """
-        raise NotImplementedError("Yet to be implemented.")
-
-    def wait_for_tasks_to_complete(self):
-        """
-        Returns when all tasks in the specified job reach the Completed state.
-        :param batch_service_client: A Batch service client.
-        :type batch_service_client: `azure.batch.BatchServiceClient`
-        :param str job_id: The id of the job whose tasks should be to monitored.
-        :param timedelta timeout: The duration to wait for task completion. If all
-        tasks in the specified job do not reach Completed state within this time
-        period, an exception will be raised.
-        """
-        raise NotImplementedError("Yet to be implemented.")
-
     def print_batch_exception(self):
         """
         Prints the contents of the specified Batch exception.
@@ -394,3 +386,71 @@ class AzureBatchClient(object):
         :param batch_exception:
         """
         raise NotImplementedError("Yet to be implemented.")
+
+
+class AzureBatchTask(luigi.Task):
+    """
+    Base class for an Azure Batch job
+
+    Azure Batch requires you to register "job definitions", which are JSON
+    descriptions for how to issue the ``docker run`` command. This Luigi Task
+    requires the azure batch account and storage account created before using this. 
+    These are passed in as Luigi parameters
+
+    :param job_definition (str): name of pre-registered jobDefinition
+    :param job_name: name of specific job, for tracking in the queue and logs.
+    :param 
+
+
+    :param batch_account_name (str): name of pre-created azure batch account
+    :param batch_account_key (str): master key for azure batch account
+    :param batch_account_url (str): batch account url
+    :param storage_account_name (str): name of pre-created storage account
+    :param storage_account_key (str): storage account key
+    :param input_path (str): path to data input on storage account
+    :param output_path (str): path to result output
+    :param pool_id (str): pool id for batch job
+    :param job_id (str): job id for the batch job
+    :param pool_node_count (str): number of nodes to create for the batch job; default is 2
+    :param pool_vm_size (str): size of vm to use for the batch job
+
+    """
+    batch_account_name = luigi.Parameter()
+    batch_account_key = luigi.Parameter()
+    storage_account_name = luigi.Parameter()
+    storage_account_key = luigi.Parameter()
+    input_path = luigi.Parameter()
+    output_path = luigi.Parameter()
+    pool_id = luigi.Parameter(default=TASK_POOL_ID)
+    job_id = luigi.Parameter(default=TASK_JOB_ID)
+    pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
+    pool_vm_size = luigi.Parameter(default=TASK_POOL_VM_SIZE)
+    kwargs = luigi.DictParameter(default={})
+
+    def run(self):
+        bc = AzureBatchClient(
+                self.batch_account_name,
+                self.batch_account_key,
+                self.batch_account_url,
+                self.storage_account_name,
+                self.storage_account_key,
+                self.output_path,
+                self.pool_id,
+                self.job_id,
+                self.pool_node_count,
+                self.pool_vm_size,
+                self.kwargs)
+
+        input_files = [bc.upload_file_to_container(self.container_name, file_path) for file_path in os.listdir(self.input_path)]
+        try:
+            bc.create_pool(self.pool_id)
+            bc.create_job(self.job_id, self.pool_id)
+            bc.add_tasks(self.job_id, input_files)
+            bc.wait_for_tasks_to_complete(self.job_id, datetime.timedelta(minutes=TASK_TIME_OUT))
+            bc.print_task_output(self.job_id)
+        except batchmodels.BatchErrorException as err:
+            bc.print_batch_exception(err)
+        finally:
+            bc.delete_blob_container(self.container_name)
+    
+        
