@@ -455,7 +455,7 @@ class AzureBatchTask(luigi.Task):
     pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
     pool_vm_size = luigi.Parameter(default=TASK_POOL_VM_SIZE)
     kwargs = luigi.DictParameter(default={})
-    container_name = luigi.Parameter(default="luigiTargetData")
+    container_name = luigi.Parameter(default="luigitargetdata")
 
     def run(self):
         bc = AzureBatchClient(
@@ -472,7 +472,7 @@ class AzureBatchTask(luigi.Task):
             # self.kwargs,
         )
 
-        bc.blob_client.create_container(self.container_name, fail_on_exist=False)
+        bc.blob_client.create_container(self.container_name)
 
         if os.path.exists(self.input_path):
             input_files = [
