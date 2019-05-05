@@ -57,7 +57,7 @@ RESOURCE_SUFFIX = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 TASK_POOL_NODE_COUNT = 2
 TASK_POOL_VM_SIZE = "STANDARD_D2_V2"
 TASK_POOL_ID = "AzureBatch-Pool-Id-{}".format(RESOURCE_SUFFIX)
-TASK_JOB_ID = "AzureBatch-Pool-Id-{}".format(RESOURCE_SUFFIX)
+TASK_JOB_ID = "AzureBatch-Job-Id-{}".format(RESOURCE_SUFFIX)
 TASK_TIME_OUT = 30
 
 
@@ -175,7 +175,7 @@ class AzureBatchClient(object):
 
         return container_sas_token
 
-    def create_pool(self):
+    def create_pool(self, start_task_cmds=None, pool_resource_files=None):
         """
         Creates a pool of compute nodes with the specified OS settings.
         :param batch_service_client: A Batch service client.
@@ -187,6 +187,24 @@ class AzureBatchClient(object):
         """
         print("Creating pool [{}]...".format(self._POOL_ID))
 
+        if self.client.pool.exists(self._POOL_ID):
+            return
+
+        user = batchmodels.AutoUserSpecification(
+            scope=batchmodels.AutoUserScope.pool,
+            elevation_level=batchmodels.ElevationLevel.admin,
+        )
+
+        if start_task_cmds is None:
+            start_task = None
+        else:
+            start_task = batchmodels.StartTask(
+                command_line=self.wrap_commands_in_shell("linux", start_task_cmds),
+                # command_line= '/bin/bash -c "sh init.sh"',
+                user_identity=batchmodels.UserIdentity(auto_user=user),
+                resource_files=pool_resource_files,
+                wait_for_success=True,
+            )
         # Create a new pool of Linux compute nodes using an Azure Virtual Machines
         # Marketplace image. For more information about creating pools of Linux
         # nodes, see:
@@ -204,6 +222,7 @@ class AzureBatchClient(object):
             ),
             vm_size=self._POOL_VM_SIZE,
             target_dedicated_nodes=self._POOL_NODE_COUNT,
+            start_task=start_task,
         )
         self.client.pool.add(new_pool)
 
@@ -413,6 +432,24 @@ class AzureBatchClient(object):
                     print("{}:\t{}".format(mesg.key, mesg.value))
         print("-------------------------------------------")
 
+    def wrap_commands_in_shell(self, ostype, commands):
+        """
+        Wrap commands in a shell
+
+        :param list commands: list of commands to wrap
+        :param str ostype: OS type, linux or windows
+        :rtype: str
+        :return: a shell wrapping commands
+        """
+        if ostype.lower() == "linux":
+            return "/bin/bash -c 'set -e; set -o pipefail; {}; wait'".format(
+                "; ".join(commands)
+            )
+        elif ostype.lower() == "windows":
+            return 'cmd.exe /c "{}"'.format("&".join(commands))
+        else:
+            raise ValueError("unknown ostype: {}".format(ostype))
+
 
 class AzureBatchTask(luigi.Task):
     """
@@ -447,15 +484,19 @@ class AzureBatchTask(luigi.Task):
     batch_account_url = luigi.Parameter()
     storage_account_name = luigi.Parameter()
     storage_account_key = luigi.Parameter()
-    input_path = luigi.Parameter(default=" ")
+    data_input_path = luigi.Parameter(default=" ")
+    script_input_path = luigi.Parameter(default=" ")
     command = luigi.Parameter(default="echo Hello World")
+    pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
+    starter_task_cmds = luigi.ListParameter(default=None)
     output_path = luigi.Parameter(default=" ")
     pool_id = luigi.Parameter(default=TASK_POOL_ID)
     job_id = luigi.Parameter(default=TASK_JOB_ID)
-    pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
     pool_vm_size = luigi.Parameter(default=TASK_POOL_VM_SIZE)
-    kwargs = luigi.DictParameter(default={})
+    delete_pool = luigi.BoolParameter()
+    delete_container = luigi.BoolParameter(True)
     container_name = luigi.Parameter(default="luigitargetdata")
+    # kwargs = luigi.DictParameter(default=None)
 
     def run(self):
         bc = AzureBatchClient(
@@ -472,27 +513,34 @@ class AzureBatchTask(luigi.Task):
             # self.kwargs,
         )
 
-        bc.blob_client.create_container(self.container_name)
+        bc.blob_client.create_container(self.container_name, fail_on_exist=False)
 
-        if os.path.exists(self.input_path):
-            input_files = [
-                bc.upload_file_to_container(
-                    self.container_name, self.input_path + file_path
-                )
-                for file_path in os.listdir(self.input_path)
-            ]
-        else:
-            input_files = []
+        def upload_files(container_name, input_path):
+            if os.path.exists(input_path):
+                return [
+                    bc.upload_file_to_container(container_name, input_path + file_path)
+                    for file_path in os.listdir(input_path)
+                ]
+            else:
+                return []
+
+        input_data_files = upload_files(self.container_name, self.data_input_path)
+        script_files = upload_files(self.container_name, self.script_input_path)
 
         try:
-            bc.create_pool()
+            bc.create_pool(self.starter_task_cmds, script_files)
             bc.create_job()
-            bc.add_tasks(input_files, self.command)
+            bc.add_tasks(input_data_files, self.command)
             bc.wait_for_tasks_to_complete(datetime.timedelta(minutes=TASK_TIME_OUT))
             bc.print_task_output()
         except batchmodels.BatchErrorException as err:
             bc.print_batch_exception(err)
         finally:
-            bc.delete_blob_container(self.container_name)
-            bc.client.job.delete(self.job_id)
-            bc.client.pool.delete(self.pool_id)
+            if self.delete_container:
+                print("deleting the container")
+                bc.delete_blob_container(self.container_name)
+
+            if self.delete_pool:
+                print("deleting the Pool")
+                bc.client.pool.delete(self.pool_id)
+
