@@ -22,6 +22,13 @@ from luigi.contrib.azurebatch import AzureBatchTask
 
 class AzureBatchHelloWorld(AzureBatchTask):
     """
+    Prerequisites: 
+    - Create an Azure Batch Service Account and Azure Storage Account
+    - Provide the secrets/credentials for Storage Account and Azure Batch Service Account in a .env file 
+    - Python Packages to install:
+        - azure batch package: ``pip install azure-batch>=6.0.0``
+        - azure blob storage: ``pip install azure-storage-blob>=1.3.1``
+  
     This is the pass through class, showing how you can inherit the new AzureBatchTask.
     You need to override methods if you need a different functionality
     This task runs a :py:class:`luigi.contrib.azurebatch.AzureBatchTask` task.
@@ -33,40 +40,14 @@ class AzureBatchHelloWorld(AzureBatchTask):
     Output results are stored on Azure storage account
     """
 
-    pass
+    batch_account_name = luigi.Parameter(os.getenv("BATCH_ACCOUNT_NAME"))
+    batch_account_key = luigi.Parameter(os.getenv("BATCH_ACCOUNT_KEY"))
+    batch_account_url = luigi.Parameter(os.getenv("BATCH_ACCOUNT_URL"))
+    storage_account_name = luigi.Parameter(os.getenv("STORAGE_ACCOUNT_NAME"))
+    storage_account_key = luigi.Parameter(os.getenv("STORAGE_ACCOUNT_KEY"))
+    command = luigi.Parameter("echo Hello World")
 
 
 if __name__ == "__main__":
 
-    """
-    Prerequisites: 
-    - Create an Azure Batch Service Account and Azure Storage Account
-    - Provide the secrets/credentials for Storage Account and Azure Batch Service Account in a .env file 
-    - Python Packages to install:
-        - azure batch package: ``pip install azure-batch>=6.0.0``
-        - azure blob storage: ``pip install azure-storage-blob>=1.3.1``
-    """
-
-    batch_account_key = os.getenv("BATCH_ACCOUNT_KEY")
-    batch_account_name = os.getenv("BATCH_ACCOUNT_NAME")
-    batch_service_url = os.getenv("BATCH_ACCOUNT_URL")
-    storage_account_key = os.getenv("STORAGE_ACCOUNT_KEY")
-    storage_account_name = os.getenv("STORAGE_ACCOUNT_NAME")
-    input_path = " "  # Path to the root dir where data & scripts are kept
-    script_name = " "  # Name of the main script which will run on Batch, e.g main.py
-    command = "echo Hello World"  # To run python script:  "python " + script_name
-
-    print("batch account name", batch_account_name)
-    build(
-        [
-            AzureBatchHelloWorld(
-                batch_account_name,
-                batch_account_key,
-                batch_service_url,
-                storage_account_name,
-                storage_account_key,
-                command,
-            )
-        ],
-        local_scheduler=True,
-    )
+    build([AzureBatchHelloWorld()], local_scheduler=True)
