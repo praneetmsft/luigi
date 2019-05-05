@@ -264,14 +264,15 @@ class AzureBatchClient(object):
                 tasks.append(
                     batch.models.TaskAddParameter(
                         id="Task-{}".format(idx),
-                        command_line=command,
+                        command_line=self.wrap_commands_in_shell("linux", command),
                         resource_files=[input_file],
                     )
                 )
         else:
             tasks.append(
                 batch.models.TaskAddParameter(
-                    id="Task-{}".format(RESOURCE_SUFFIX), command_line=command
+                    id="Task-{}".format(RESOURCE_SUFFIX),
+                    command_line=self.wrap_commands_in_shell("linux", command),
                 )
             )
 
@@ -486,7 +487,7 @@ class AzureBatchTask(luigi.Task):
     storage_account_key = luigi.Parameter()
     data_input_path = luigi.Parameter(default=" ")
     script_input_path = luigi.Parameter(default=" ")
-    command = luigi.Parameter(default="echo Hello World")
+    command = luigi.ListParameter(default=["echo Hello World"])
     pool_node_count = luigi.IntParameter(default=TASK_POOL_NODE_COUNT)
     starter_task_cmds = luigi.ListParameter(default=None)
     output_path = luigi.Parameter(default=" ")
@@ -543,4 +544,3 @@ class AzureBatchTask(luigi.Task):
             if self.delete_pool:
                 print("deleting the Pool")
                 bc.client.pool.delete(self.pool_id)
-
